@@ -242,7 +242,9 @@ struct ContentView: View {
 struct TableauProjetView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var draggedTicket: Ticket?
-    var projet: Projet
+    @State private var targetStatut: Statut?
+    // Utilisez ObservedObject pour que les modifications sur le projet soient observées
+    @State var projet: Projet
     var appState: AppState
     
     var body: some View {
@@ -301,26 +303,35 @@ struct TableauProjetView: View {
                         .padding([.horizontal, .top])
                         .background(Color.gray.opacity(0.05))
                         
-                        // Liste de tickets
+                        // Liste de tickets avec zone de drop
                         ScrollView {
                             LazyVStack(spacing: 10) {
                                 ForEach(ticketsDansColonne(statut: statut)) { ticket in
                                     TicketView(ticket: ticket)
                                         .onDrag {
                                             self.draggedTicket = ticket
-                                            return NSItemProvider(contentsOf: URL(string: "\(ticket.id)"))!
+                                            return NSItemProvider(object: "\(ticket.id)" as NSString)
                                         }
                                         .padding(.horizontal)
                                 }
                                 .padding(.top, 10)
                             }
+                            .frame(minHeight: 300) // Définir une hauteur minimale pour la zone de drop
                         }
-                        .onDrop(of: [.url], isTargeted: nil) { providers, _ in
-                            if let ticket = self.draggedTicket {
+                        .background(Color.gray.opacity(0.02))
+                        .cornerRadius(5)
+                        .onDrop(of: [.text], isTargeted: nil) { providers, location in
+                            guard let ticket = self.draggedTicket else { return false }
+                            
+                            // Ne rien faire si le ticket est déjà dans cette colonne
+                            if ticket.statut == statut { return false }
+                            
+                            // Changer le statut du ticket
+                            withAnimation {
                                 ticket.statut = statut
-                                return true
                             }
-                            return false
+                            try? modelContext.save()
+                            return true
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -344,7 +355,9 @@ struct TableauProjetView: View {
 
 // MARK: - Vue d'un ticket
 struct TicketView: View {
-    var ticket: Ticket
+    @Environment(\.modelContext) private var modelContext
+    // Utilisez ObservedObject pour que les modifications sur le ticket soient observées
+    @State var ticket: Ticket
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -371,7 +384,7 @@ struct TicketView: View {
                 .cornerRadius(10)
             }
             
-            // desc
+            // description
             if !ticket.desc.isEmpty {
                 Text(ticket.desc)
                     .font(.caption)
@@ -403,6 +416,7 @@ struct TicketView: View {
                 ForEach(Priorite.allCases, id: \.self) { priorite in
                     Button {
                         ticket.priorite = priorite
+                        try? modelContext.save()
                     } label: {
                         Label(priorite.rawValue, systemImage: ticket.priorite == priorite ? "checkmark" : "")
                     }
@@ -414,7 +428,12 @@ struct TicketView: View {
             Divider()
             
             Button(role: .destructive) {
-                // Supprimer ticket
+                if let projet = ticket.projet {
+                    if let index = projet.tickets.firstIndex(where: { $0.id == ticket.id }) {
+                        projet.tickets.remove(at: index)
+                        try? modelContext.save()
+                    }
+                }
             } label: {
                 Label("Supprimer", systemImage: "trash")
             }
