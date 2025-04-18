@@ -313,7 +313,6 @@ struct ContentView: View {
 
 // MARK: - Vue du tableau de projet (style Kanban)
 struct TableauProjetView: View {
-    
     @Environment(\.modelContext) private var modelContext
     @State private var draggedTicket: Ticket?
     @State private var targetStatut: Statut?
@@ -321,12 +320,25 @@ struct TableauProjetView: View {
     var appState: AppState
     @State private var afficherConfirmationSuppression = false
     
+    private func getStatutIcon(_ statut: Statut) -> (String, Color) {
+        switch statut {
+        case .backlog:
+            return ("tray.fill", .blue)
+        case .aFaire:
+            return ("play.circle.fill", .green)
+        case .aTester:
+            return ("checklist", .pink)
+        case .termine:
+            return ("checkmark.circle.fill", .orange)
+        }
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
-            // Barre de titre du projet
+            // En-tête du projet
             HStack {
                 Text(projet.nom)
-                    .font(.largeTitle)
+                    .font(.title)
                     .fontWeight(.bold)
                 
                 Spacer()
@@ -342,9 +354,10 @@ struct TableauProjetView: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .font(.title3)
+                        .foregroundColor(.primary)
                 }
                 .menuStyle(.borderlessButton)
-                .frame(width: 150)
+                .frame(width: 50)
                 
                 Button(action: {
                     appState.afficherFormNouveauTicket = true
@@ -353,34 +366,44 @@ struct TableauProjetView: View {
                         .labelStyle(.titleAndIcon)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.blue)
                 .padding(.leading)
             }
             .padding()
-            .background(Color.gray.opacity(0.1))
+            .background(.ultraThinMaterial)
+            .shadow(color: Color.black.opacity(0.05), radius: 2, y: 2)
             
-            HStack(spacing: 0) {
+            // Colonnes de statuts
+            HStack(spacing: 16) {
                 ForEach(Statut.allCases, id: \.self) { statut in
-                    VStack {
+                    VStack(spacing: 0) {
                         // En-tête de colonne
                         HStack {
+                            let (icon, color) = getStatutIcon(statut)
+                            Image(systemName: icon)
+                                .foregroundColor(color)
+                                .font(.headline)
+                            
                             Text(statut.rawValue)
                                 .font(.headline)
-                                .padding(.leading)
+                                .foregroundColor(.primary)
                             
                             Spacer()
                             
                             Text("\(ticketsDansColonne(statut: statut).count)")
                                 .font(.caption)
-                                .padding(5)
-                                .background(Color.secondary.opacity(0.2))
-                                .cornerRadius(10)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.blue.opacity(0.1))
+                                .foregroundColor(.blue)
+                                .clipShape(Capsule())
                         }
-                        .padding([.horizontal, .top])
-                        .background(Color.gray.opacity(0.05))
+                        .padding()
+                        .background(.ultraThinMaterial)
                         
-                        // Liste de tickets avec zone de drop
+                        // Liste de tickets
                         ScrollView {
-                            LazyVStack(spacing: 10) {
+                            LazyVStack(spacing: 12) {
                                 ForEach(ticketsDansColonne(statut: statut).sorted(by: { $0.dateCreation > $1.dateCreation })) { ticket in
                                     TicketView(ticket: ticket)
                                         .onDrag {
@@ -389,19 +412,14 @@ struct TableauProjetView: View {
                                         }
                                         .padding(.horizontal)
                                 }
-                                .padding(.top, 10)
                             }
-                            .frame(minHeight: 300) // Définir une hauteur minimale pour la zone de drop
+                            .padding(.vertical, 8)
+                            .frame(minHeight: 300)
                         }
-                        .background(Color.gray.opacity(0.02))
-                        .cornerRadius(5)
+                        .background(.ultraThinMaterial)
                         .onDrop(of: [.text], isTargeted: nil) { providers, location in
                             guard let ticket = self.draggedTicket else { return false }
-                            
-                            // Ne rien faire si le ticket est déjà dans cette colonne
                             if ticket.statut == statut { return false }
-                            
-                            // Changer le statut du ticket
                             withAnimation {
                                 ticket.statut = statut
                             }
@@ -410,29 +428,22 @@ struct TableauProjetView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.gray.opacity(0.05))
-                    .cornerRadius(10)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                    )
-                    .padding(5)
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: Color.black.opacity(0.03), radius: 3, x: 0, y: 2)
                 }
             }
+            .padding()
+            .background(.ultraThinMaterial)
         }
         .alert("Supprimer le projet ?", isPresented: $afficherConfirmationSuppression) {
             Button("Annuler", role: .cancel) {}
             Button("Supprimer", role: .destructive) {
-                // Supprimer tous les tickets associés
                 for ticket in projet.tickets {
                     modelContext.delete(ticket)
                 }
-                
-                // Supprimer le projet
                 modelContext.delete(projet)
                 try? modelContext.save()
-                
-                // Déselectionner le projet
                 appState.projetSelectionne = nil
             }
         } message: {
@@ -440,7 +451,6 @@ struct TableauProjetView: View {
         }
     }
     
-    // Fonction pour filtrer les tickets par statut
     private func ticketsDansColonne(statut: Statut) -> [Ticket] {
         return projet.tickets.filter { $0.statut == statut }
     }
