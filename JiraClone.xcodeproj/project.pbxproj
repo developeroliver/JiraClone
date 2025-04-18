@@ -6,17 +6,17 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		37FAF6F72DB15C9F00E55BB1 /* JiraCloneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37FAF6F52DB15C9F00E55BB1 /* JiraCloneApp.swift */; };
+		37FAF6F82DB15C9F00E55BB1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 37FAF6F32DB15C9F00E55BB1 /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		37FAF6E42DB15C8E00E55BB1 /* JiraClone.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JiraClone.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		37FAF6F32DB15C9F00E55BB1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		37FAF6F42DB15C9F00E55BB1 /* JiraClone.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = JiraClone.entitlements; sourceTree = "<group>"; };
+		37FAF6F52DB15C9F00E55BB1 /* JiraCloneApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JiraCloneApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		37FAF6E62DB15C8E00E55BB1 /* JiraClone */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = JiraClone;
-			sourceTree = "<group>";
-		};
-/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		37FAF6E12DB15C8E00E55BB1 /* Frameworks */ = {
@@ -32,7 +32,7 @@
 		37FAF6DB2DB15C8E00E55BB1 = {
 			isa = PBXGroup;
 			children = (
-				37FAF6E62DB15C8E00E55BB1 /* JiraClone */,
+				37FAF6F62DB15C9F00E55BB1 /* JiraClone */,
 				37FAF6E52DB15C8E00E55BB1 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -43,6 +43,16 @@
 				37FAF6E42DB15C8E00E55BB1 /* JiraClone.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		37FAF6F62DB15C9F00E55BB1 /* JiraClone */ = {
+			isa = PBXGroup;
+			children = (
+				37FAF6F32DB15C9F00E55BB1 /* Assets.xcassets */,
+				37FAF6F42DB15C9F00E55BB1 /* JiraClone.entitlements */,
+				37FAF6F52DB15C9F00E55BB1 /* JiraCloneApp.swift */,
+			);
+			path = JiraClone;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -59,9 +69,6 @@
 			buildRules = (
 			);
 			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				37FAF6E62DB15C8E00E55BB1 /* JiraClone */,
 			);
 			name = JiraClone;
 			packageProductDependencies = (
@@ -109,6 +116,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				37FAF6F82DB15C9F00E55BB1 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,6 +127,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				37FAF6F72DB15C9F00E55BB1 /* JiraCloneApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
