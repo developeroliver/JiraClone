@@ -104,7 +104,7 @@ struct JiraCloneApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(minWidth: 1200, minHeight: 800)
+                .frame(minWidth: 1400, minHeight: 800)
         }
         .windowStyle(.hiddenTitleBar)
         .commands {
@@ -312,6 +312,7 @@ struct ContentView: View {
 }
 
 // MARK: - Vue du tableau de projet (style Kanban)
+
 struct TableauProjetView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var draggedTicket: Ticket?
@@ -320,120 +321,26 @@ struct TableauProjetView: View {
     var appState: AppState
     @State private var afficherConfirmationSuppression = false
     
-    private func getStatutIcon(_ statut: Statut) -> (String, Color) {
-        switch statut {
-        case .backlog:
-            return ("tray.fill", .blue)
-        case .aFaire:
-            return ("play.circle.fill", .green)
-        case .aTester:
-            return ("checklist", .pink)
-        case .termine:
-            return ("checkmark.circle.fill", .orange)
-        }
-    }
-    
     var body: some View {
         VStack(spacing: 0) {
-            // En-tête du projet
-            HStack {
-                Text(projet.nom)
-                    .font(.title)
-                    .fontWeight(.bold)
-                
-                Spacer()
-                
-                Menu {
-                    Button("Renommer le projet", action: {
-                        // À implémenter
-                    })
-                    
-                    Button("Supprimer le projet", role: .destructive) {
-                        afficherConfirmationSuppression = true
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.title3)
-                        .foregroundColor(.primary)
-                }
-                .menuStyle(.borderlessButton)
-                .frame(width: 50)
-                
-                Button(action: {
-                    appState.afficherFormNouveauTicket = true
-                }) {
-                    Label("Nouveau ticket", systemImage: "plus")
-                        .labelStyle(.titleAndIcon)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
-                .padding(.leading)
-            }
-            .padding()
-            .background(.ultraThinMaterial)
-            .shadow(color: Color.black.opacity(0.05), radius: 2, y: 2)
+            ProjetHeaderView(
+                projet: projet,
+                afficherConfirmationSuppression: $afficherConfirmationSuppression,
+                appState: appState
+            )
             
-            // Colonnes de statuts
-            HStack(spacing: 16) {
-                ForEach(Statut.allCases, id: \.self) { statut in
-                    VStack(spacing: 0) {
-                        // En-tête de colonne
-                        HStack {
-                            let (icon, color) = getStatutIcon(statut)
-                            Image(systemName: icon)
-                                .foregroundColor(color)
-                                .font(.headline)
-                            
-                            Text(statut.rawValue)
-                                .font(.headline)
-                                .foregroundColor(.primary)
-                            
-                            Spacer()
-                            
-                            Text("\(ticketsDansColonne(statut: statut).count)")
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.blue.opacity(0.1))
-                                .foregroundColor(.blue)
-                                .clipShape(Capsule())
-                        }
-                        .padding()
-                        .background(.ultraThinMaterial)
-                        
-                        // Liste de tickets
-                        ScrollView {
-                            LazyVStack(spacing: 12) {
-                                ForEach(ticketsDansColonne(statut: statut).sorted(by: { $0.dateCreation > $1.dateCreation })) { ticket in
-                                    TicketView(ticket: ticket)
-                                        .onDrag {
-                                            self.draggedTicket = ticket
-                                            return NSItemProvider(object: "\(ticket.id)" as NSString)
-                                        }
-                                        .padding(.horizontal)
-                                }
-                            }
-                            .padding(.vertical, 8)
-                            .frame(minHeight: 300)
-                        }
-                        .background(.ultraThinMaterial)
-                        .onDrop(of: [.text], isTargeted: nil) { providers, location in
-                            guard let ticket = self.draggedTicket else { return false }
-                            if ticket.statut == statut { return false }
-                            withAnimation {
-                                ticket.statut = statut
-                            }
-                            try? modelContext.save()
-                            return true
-                        }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 16) {
+                    ForEach(Statut.allCases, id: \.self) { statut in
+                        StatutColumnView(
+                            statut: statut,
+                            tickets: ticketsDansColonne(statut: statut),
+                            draggedTicket: $draggedTicket
+                        )
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(color: Color.black.opacity(0.03), radius: 3, x: 0, y: 2)
                 }
+                .padding()
             }
-            .padding()
             .background(.ultraThinMaterial)
         }
         .alert("Supprimer le projet ?", isPresented: $afficherConfirmationSuppression) {
@@ -453,6 +360,134 @@ struct TableauProjetView: View {
     
     private func ticketsDansColonne(statut: Statut) -> [Ticket] {
         return projet.tickets.filter { $0.statut == statut }
+    }
+}
+
+struct StatutColumnView: View {
+    let statut: Statut
+    let tickets: [Ticket]
+    @Binding var draggedTicket: Ticket?
+    @Environment(\.modelContext) private var modelContext
+    
+    private func getStatutIcon(_ statut: Statut) -> (String, Color) {
+        switch statut {
+        case .backlog:
+            return ("tray.fill", .blue)
+        case .aFaire:
+            return ("play.circle.fill", .green)
+        case .aTester:
+            return ("checklist", .pink)
+        case .termine:
+            return ("checkmark.circle.fill", .orange)
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // En-tête de colonne
+            HStack {
+                let (icon, color) = getStatutIcon(statut)
+                Image(systemName: icon)
+                    .foregroundColor(color)
+                    .font(.headline)
+                
+                Text(statut.rawValue)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Text("\(tickets.count)")
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.blue.opacity(0.1))
+                    .foregroundColor(.blue)
+                    .clipShape(Capsule())
+            }
+            .padding()
+            .background(.thinMaterial)
+            
+            // Liste de tickets
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(tickets.sorted(by: { $0.dateCreation > $1.dateCreation })) { ticket in
+                        TicketView(ticket: ticket)
+                            .onDrag {
+                                self.draggedTicket = ticket
+                                return NSItemProvider(object: "\(ticket.id)" as NSString)
+                            }
+                            .padding(.horizontal)
+                    }
+                }
+                .padding(.vertical, 8)
+                .frame(minHeight: 300)
+            }
+            .background(.ultraThinMaterial)
+            .onDrop(of: [.text], isTargeted: nil) { providers, location in
+                guard let ticket = draggedTicket else { return false }
+                if ticket.statut == statut { return false }
+                withAnimation {
+                    ticket.statut = statut
+                }
+                try? modelContext.save()
+                return true
+            }
+        }
+        .frame(width: 250)
+        .frame(maxHeight: .infinity)
+        .background(.ultraThickMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: Color.black.opacity(0.03), radius: 3, x: 0, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
+    }
+}
+
+struct ProjetHeaderView: View {
+    let projet: Projet
+    @Binding var afficherConfirmationSuppression: Bool
+    let appState: AppState
+    
+    var body: some View {
+        HStack {
+            Text(projet.nom)
+                .font(.title)
+                .fontWeight(.bold)
+            
+            Spacer()
+            
+            Menu {
+                Button("Renommer le projet", action: {
+                    // À implémenter
+                })
+                
+                Button("Supprimer le projet", role: .destructive) {
+                    afficherConfirmationSuppression = true
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.title3)
+                    .foregroundColor(.primary)
+            }
+            .menuStyle(.borderlessButton)
+            .frame(width: 50)
+            
+            Button(action: {
+                appState.afficherFormNouveauTicket = true
+            }) {
+                Label("Nouveau ticket", systemImage: "plus")
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.blue)
+            .padding(.leading)
+        }
+        .padding()
+        .background(.ultraThinMaterial)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, y: 2)
     }
 }
 
@@ -706,6 +741,10 @@ struct TicketView: View {
         .padding()
         .background(.ultraThickMaterial)
         .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(ticket.priorite.couleur.opacity(0.5), lineWidth: 2)
+        )
         .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 1)
         .contentShape(Rectangle())
         .onTapGesture {
