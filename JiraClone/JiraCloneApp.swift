@@ -26,6 +26,7 @@ class Ticket {
     var statut: Statut
     var priorite: Priorite
     var dateCreation: Date
+    var instructions: [Instruction] = []
     @Relationship(inverse: \Projet.tickets) var projet: Projet?
     
     init(titre: String, desc: String, statut: Statut = .backlog, priorite: Priorite = .moyenne) {
@@ -34,6 +35,34 @@ class Ticket {
         self.statut = statut
         self.priorite = priorite
         self.dateCreation = Date()
+        self.instructions = []
+    }
+    
+    var nombreInstructionsTerminees: Int {
+        return instructions.filter { $0.estTerminee }.count
+    }
+    
+    var nombreInstructions: Int {
+        return instructions.count
+    }
+    
+    var progressionInstructions: Double {
+        if instructions.isEmpty {
+            return 0.0
+        }
+        return Double(nombreInstructionsTerminees) / Double(nombreInstructions)
+    }
+}
+
+@Model
+class Instruction {
+    var texte: String
+    var estTerminee: Bool
+    @Relationship(inverse: \Ticket.instructions) var ticket: Ticket?
+    
+    init(texte: String, estTerminee: Bool = false) {
+        self.texte = texte
+        self.estTerminee = estTerminee
     }
 }
 
@@ -106,12 +135,12 @@ struct WindowAccessor: NSViewRepresentable {
         }
         return NSView()
     }
-
+    
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 
-// MARK: - Vue principale
+// MARK: - AppState
 @Observable
 class AppState {
     var projetSelectionne: Projet?
@@ -119,91 +148,97 @@ class AppState {
     var afficherFormNouveauTicket = false
 }
 
+// MARK: - ContentView
 struct ContentView: View {
+    
     @Environment(\.modelContext) private var modelContext
     @Query private var projets: [Projet]
     @State private var appState = AppState()
     
     var body: some View {
-        ZStack {
-            NavigationSplitView {
-                // Liste des projets dans la barre latérale
-                List(projets, selection: $appState.projetSelectionne) { projet in
-                    NavigationLink(value: projet) {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(projet.nom)
-                                    .font(.headline)
-                                Text("\(projet.nombreTickets) tickets")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            Text(projet.dateCreation.formatted(date: .abbreviated, time: .omitted))
-                                .font(.caption2)
+        NavigationSplitView {
+            List(selection: $appState.projetSelectionne) {
+                ForEach(projets) { projet in
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(projet.nom)
+                                .font(.headline)
+                            Text("\(projet.nombreTickets) tickets")
+                                .font(.caption)
                                 .foregroundColor(.secondary)
                         }
-                        .padding(.vertical, 3)
-                    }
-                }
-                .navigationTitle("Projets")
-                .listStyle(.sidebar)
-                .toolbar {
-                    ToolbarItem {
-                        Button(action: {
-                            appState.afficherFormNouveauProjet = true
-                        }) {
-                            Label("Nouveau projet", systemImage: "plus")
-                        }
-                    }
-                }
-            } detail: {
-                if let projet = appState.projetSelectionne {
-                    TableauProjetView(projet: projet, appState: appState)
-                } else {
-                    VStack {
-                        Image(systemName: "square.grid.3x3.square")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 80, height: 80)
+                        Spacer()
+                        Text(projet.dateCreation.formatted(date: .abbreviated, time: .omitted))
+                            .font(.caption2)
                             .foregroundColor(.secondary)
-                        Text("Sélectionnez un projet pour afficher son tableau")
-                            .font(.title2)
-                            .foregroundColor(.secondary)
-                        Button("Créer un nouveau projet") {
-                            appState.afficherFormNouveauProjet = true
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .padding(.top)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.gray.opacity(0.1))
+                    .padding(.vertical, 3)
+                    .tag(projet)
                 }
             }
-            .sheet(isPresented: $appState.afficherFormNouveauProjet) {
-                NouveauProjetView(estAffiche: $appState.afficherFormNouveauProjet)
-                    .frame(width: 400, height: 250)
-            }
-            .sheet(isPresented: $appState.afficherFormNouveauTicket) {
-                if let projet = appState.projetSelectionne {
-                    NouveauTicketView(estAffiche: $appState.afficherFormNouveauTicket, projet: projet)
-                        .frame(width: 500, height: 400)
+            .navigationTitle("Projets")
+            .listStyle(.sidebar)
+            .toolbar {
+                ToolbarItem {
+                    Button(action: {
+                        appState.afficherFormNouveauProjet = true
+                    }) {
+                        Label("Nouveau projet", systemImage: "plus")
+                    }
                 }
             }
-            .onAppear {
-                if projets.isEmpty {
-                    creerExemplesDeTest()
+            .onChange(of: appState.projetSelectionne) { oldValue, newValue in
+                // Debug - affiche dans la console quand la sélection change
+                print("Projet sélectionné: \(newValue?.nom ?? "aucun")")
+            }
+        } detail: {
+            if let projet = appState.projetSelectionne {
+                TableauProjetView(projet: projet, appState: appState)
+                    .id(projet.id)
+            } else {
+                VStack {
+                    Image(systemName: "square.grid.3x3.square")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 80, height: 80)
+                        .foregroundColor(.secondary)
+                    Text("Sélectionnez un projet pour afficher son tableau")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                    Button("Créer un nouveau projet") {
+                        appState.afficherFormNouveauProjet = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .padding(.top)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.gray.opacity(0.1))
             }
-            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("NouveauProjet"))) { _ in
-                appState.afficherFormNouveauProjet = true
+        }
+        .sheet(isPresented: $appState.afficherFormNouveauProjet) {
+            NouveauProjetView(estAffiche: $appState.afficherFormNouveauProjet)
+                .frame(width: 400, height: 250)
+        }
+        .sheet(isPresented: $appState.afficherFormNouveauTicket) {
+            if let projet = appState.projetSelectionne {
+                NouveauTicketView(estAffiche: $appState.afficherFormNouveauTicket, projet: projet)
+                    .frame(width: 500, height: 600)
             }
-            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("NouveauTicket"))) { _ in
-                if appState.projetSelectionne != nil {
-                    appState.afficherFormNouveauTicket = true
-                }
+        }
+        .onAppear {
+            if projets.isEmpty {
+                creerExemplesDeTest()
+            } else if appState.projetSelectionne == nil {
+                appState.projetSelectionne = projets.first
             }
-            WindowAccessor()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("NouveauProjet"))) { _ in
+            appState.afficherFormNouveauProjet = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("NouveauTicket"))) { _ in
+            if appState.projetSelectionne != nil {
+                appState.afficherFormNouveauTicket = true
+            }
         }
     }
     
@@ -219,6 +254,28 @@ struct ContentView: View {
             Ticket(titre: "Correction bug panier", desc: "Résoudre le problème de mise à jour des quantités", statut: .termine, priorite: .critique)
         ]
         
+        // Ajouter des instructions à certains tickets
+        let instructionsPaiement = [
+            Instruction(texte: "Créer un compte développeur Stripe", estTerminee: true),
+            Instruction(texte: "Générer les clés API", estTerminee: true),
+            Instruction(texte: "Intégrer le SDK Stripe", estTerminee: false),
+            Instruction(texte: "Implémenter le processus de paiement", estTerminee: false)
+        ]
+        
+        let instructionsPageProduit = [
+            Instruction(texte: "Maquetter la page", estTerminee: true),
+            Instruction(texte: "Créer la galerie d'images", estTerminee: false),
+            Instruction(texte: "Implémenter le sélecteur de variantes", estTerminee: false)
+        ]
+        
+        for instruction in instructionsPaiement {
+            tickets[0].instructions.append(instruction)
+        }
+        
+        for instruction in instructionsPageProduit {
+            tickets[1].instructions.append(instruction)
+        }
+        
         for ticket in tickets {
             projetWeb.tickets.append(ticket)
         }
@@ -229,23 +286,40 @@ struct ContentView: View {
             Ticket(titre: "Notifications push", desc: "Configurer les notifications pour les nouveaux messages", statut: .aTester, priorite: .moyenne)
         ]
         
+        // Ajouter des instructions au ticket Login
+        let instructionsLogin = [
+            Instruction(texte: "Ajouter les permissions dans Info.plist", estTerminee: true),
+            Instruction(texte: "Implémenter la méthode d'authentification", estTerminee: false),
+            Instruction(texte: "Gérer les cas d'erreur", estTerminee: false)
+        ]
+        
+        for instruction in instructionsLogin {
+            ticketsMobile[0].instructions.append(instruction)
+        }
+        
         for ticket in ticketsMobile {
             projetMobile.tickets.append(ticket)
         }
         
         modelContext.insert(projetWeb)
         modelContext.insert(projetMobile)
+        
+        try? modelContext.save()
+        
+        // Sélectionner automatiquement le premier projet créé
+        appState.projetSelectionne = projetWeb
     }
 }
 
 // MARK: - Vue du tableau de projet (style Kanban)
 struct TableauProjetView: View {
+    
     @Environment(\.modelContext) private var modelContext
     @State private var draggedTicket: Ticket?
     @State private var targetStatut: Statut?
-    // Utilisez ObservedObject pour que les modifications sur le projet soient observées
-    @State var projet: Projet
+    var projet: Projet
     var appState: AppState
+    @State private var afficherConfirmationSuppression = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -259,16 +333,18 @@ struct TableauProjetView: View {
                 
                 Menu {
                     Button("Renommer le projet", action: {
-                        // To implement
+                        // À implémenter
                     })
                     
                     Button("Supprimer le projet", role: .destructive) {
-                        modelContext.delete(projet)
+                        afficherConfirmationSuppression = true
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .font(.title3)
                 }
+                .menuStyle(.borderlessButton)
+                .frame(width: 150)
                 
                 Button(action: {
                     appState.afficherFormNouveauTicket = true
@@ -282,7 +358,6 @@ struct TableauProjetView: View {
             .padding()
             .background(Color.gray.opacity(0.1))
             
-            // Colonnes du tableau
             HStack(spacing: 0) {
                 ForEach(Statut.allCases, id: \.self) { statut in
                     VStack {
@@ -306,7 +381,7 @@ struct TableauProjetView: View {
                         // Liste de tickets avec zone de drop
                         ScrollView {
                             LazyVStack(spacing: 10) {
-                                ForEach(ticketsDansColonne(statut: statut)) { ticket in
+                                ForEach(ticketsDansColonne(statut: statut).sorted(by: { $0.dateCreation > $1.dateCreation })) { ticket in
                                     TicketView(ticket: ticket)
                                         .onDrag {
                                             self.draggedTicket = ticket
@@ -345,6 +420,24 @@ struct TableauProjetView: View {
                 }
             }
         }
+        .alert("Supprimer le projet ?", isPresented: $afficherConfirmationSuppression) {
+            Button("Annuler", role: .cancel) {}
+            Button("Supprimer", role: .destructive) {
+                // Supprimer tous les tickets associés
+                for ticket in projet.tickets {
+                    modelContext.delete(ticket)
+                }
+                
+                // Supprimer le projet
+                modelContext.delete(projet)
+                try? modelContext.save()
+                
+                // Déselectionner le projet
+                appState.projetSelectionne = nil
+            }
+        } message: {
+            Text("Vous êtes sur le point de supprimer le projet \"\(projet.nom)\" avec \(projet.tickets.count) tickets. Cette action est irréversible.")
+        }
     }
     
     // Fonction pour filtrer les tickets par statut
@@ -354,10 +447,184 @@ struct TableauProjetView: View {
 }
 
 // MARK: - Vue d'un ticket
+struct TicketDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @Bindable var ticket: Ticket
+    @State private var nouvelleInstruction: String = ""
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            // En-tête avec titre et priorité
+            HStack {
+                Text(ticket.titre)
+                    .font(.title)
+                    .fontWeight(.bold)
+                
+                Spacer()
+                
+                Picker("Priorité", selection: $ticket.priorite) {
+                    ForEach(Priorite.allCases, id: \.self) { priorite in
+                        HStack {
+                            Circle()
+                                .fill(priorite.couleur)
+                                .frame(width: 10, height: 10)
+                            Text(priorite.rawValue)
+                        }
+                        .tag(priorite)
+                    }
+                }
+                .pickerStyle(.menu)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(ticket.priorite.couleur.opacity(0.1))
+                .cornerRadius(8)
+            }
+            
+            Divider()
+            
+            // Description du ticket
+            Group {
+                Text("Description")
+                    .font(.headline)
+                
+                TextEditor(text: $ticket.desc)
+                    .padding(10)
+                    .frame(height: 100)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(10)
+            }
+            
+            Divider()
+            
+            // Section des instructions
+            Group {
+                Text("Instructions")
+                    .font(.headline)
+                
+                // Barre de progression
+                if ticket.nombreInstructions > 0 {
+                    HStack {
+                        Text("\(ticket.nombreInstructionsTerminees)/\(ticket.nombreInstructions)")
+                            .font(.caption)
+                        
+                        ProgressView(value: ticket.progressionInstructions)
+                            .progressViewStyle(.linear)
+                    }
+                    .padding(.bottom, 8)
+                }
+                
+                // Liste des instructions avec checkboxes
+                VStack {
+                    List {
+                        ForEach(ticket.instructions) { instruction in
+                            HStack {
+                                Button(action: {
+                                    instruction.estTerminee.toggle()
+                                    try? modelContext.save()
+                                }) {
+                                    Image(systemName: instruction.estTerminee ? "checkmark.square.fill" : "square")
+                                        .foregroundColor(instruction.estTerminee ? .green : .gray)
+                                }
+                                
+                                TextField("Instruction", text: .init(
+                                    get: { instruction.texte },
+                                    set: {
+                                        instruction.texte = $0
+                                        try? modelContext.save()
+                                    }
+                                ))
+                                
+                                Button(action: {
+                                    withAnimation {
+                                        if let index = ticket.instructions.firstIndex(where: { $0.id == instruction.id }) {
+                                            ticket.instructions.remove(at: index)
+                                            modelContext.delete(instruction)
+                                            try? modelContext.save()
+                                        }
+                                    }
+                                }) {
+                                    Image(systemName: "trash")
+                                        .foregroundColor(.red)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .frame(height: 200)
+                    .listStyle(.plain)
+                    .background(Color.gray.opacity(0.05))
+                    .cornerRadius(10)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                    )
+                    
+                    // Champ pour ajouter une nouvelle instruction
+                    HStack {
+                        TextField("Nouvelle instruction", text: $nouvelleInstruction)
+                            .padding(10)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(10)
+                        
+                        Button(action: {
+                            ajouterInstruction()
+                        }) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title2)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(nouvelleInstruction.isEmpty)
+                    }
+                }
+            }
+            
+            Divider()
+            
+            // Statut du ticket
+            Group {
+                Text("Statut")
+                    .font(.headline)
+                
+                Picker("Statut", selection: $ticket.statut) {
+                    ForEach(Statut.allCases, id: \.self) { statut in
+                        Text(statut.rawValue).tag(statut)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            
+            Spacer()
+            
+            // Bouton pour fermer la vue détaillée
+            HStack {
+                Spacer()
+                Button("Fermer") {
+                    try? modelContext.save()
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding()
+    }
+    
+    private func ajouterInstruction() {
+        guard !nouvelleInstruction.isEmpty else { return }
+        
+        let instruction = Instruction(texte: nouvelleInstruction, estTerminee: false)
+        ticket.instructions.append(instruction)
+        try? modelContext.save()
+        
+        nouvelleInstruction = ""
+    }
+}
+
+// 4. Modifions la vue TicketView pour ouvrir la vue détaillée
 struct TicketView: View {
     @Environment(\.modelContext) private var modelContext
-    // Utilisez ObservedObject pour que les modifications sur le ticket soient observées
     @State var ticket: Ticket
+    @State private var afficherDetails = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -392,6 +659,32 @@ struct TicketView: View {
                     .lineLimit(3)
             }
             
+            // Afficher le nombre d'instructions si présentes
+            if ticket.nombreInstructions > 0 {
+                HStack {
+                    Image(systemName: "checklist")
+                        .font(.caption2)
+                    Text("\(ticket.nombreInstructionsTerminees)/\(ticket.nombreInstructions)")
+                        .font(.caption2)
+                    
+                    // Mini-barre de progression
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Rectangle()
+                                .frame(width: geometry.size.width, height: 4)
+                                .opacity(0.2)
+                                .foregroundColor(.gray)
+                            
+                            Rectangle()
+                                .frame(width: geometry.size.width * ticket.progressionInstructions, height: 4)
+                                .foregroundColor(ticket.priorite.couleur)
+                        }
+                    }
+                    .frame(height: 4)
+                }
+                .padding(.top, 4)
+            }
+            
             // Date de création
             HStack {
                 Spacer()
@@ -401,13 +694,16 @@ struct TicketView: View {
             }
         }
         .padding()
-        .background(Color.white)
+        .background(.ultraThickMaterial)
         .cornerRadius(10)
         .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 1)
-        .contentShape(Rectangle()) // Pour que toute la carte soit cliquable/draggable
+        .contentShape(Rectangle())
+        .onTapGesture {
+            afficherDetails = true
+        }
         .contextMenu {
             Button {
-                // Afficher détails
+                afficherDetails = true
             } label: {
                 Label("Afficher les détails", systemImage: "eye")
             }
@@ -438,59 +734,78 @@ struct TicketView: View {
                 Label("Supprimer", systemImage: "trash")
             }
         }
-    }
-}
-
-// MARK: - Vue pour créer un nouveau projet
-struct NouveauProjetView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Binding var estAffiche: Bool
-    @State private var nomProjet = ""
-    
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Nouveau projet")
-                .font(.title)
-                .fontWeight(.bold)
-            
-            Divider()
-            
-            TextField("Nom du projet", text: $nomProjet)
-                .font(.title3)
-                .padding()
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(10)
-            
-            Spacer()
-            
-            HStack {
-                Button("Annuler") {
-                    estAffiche = false
-                }
-                .buttonStyle(.bordered)
-                
-                Spacer()
-                
-                Button("Créer") {
-                    creerProjet()
-                    estAffiche = false
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(nomProjet.isEmpty)
-            }
+        .sheet(isPresented: $afficherDetails) {
+            TicketDetailView(ticket: ticket)
+                .frame(width: 600, height: 700)
         }
-        .padding()
-    }
-    
-    private func creerProjet() {
-        guard !nomProjet.isEmpty else { return }
-        
-        let nouveauProjet = Projet(nom: nomProjet)
-        modelContext.insert(nouveauProjet)
     }
 }
 
-// MARK: - Vue pour créer un nouveau ticket
+// 5. Modifions aussi la fonction creerExemplesDeTest pour inclure des instructions
+private func creerExemplesDeTest() {
+    @Environment(\.modelContext) var modelContext
+    let projetWeb = Projet(nom: "Site Web E-commerce")
+    let projetMobile = Projet(nom: "Application Mobile")
+    
+    let tickets = [
+        Ticket(titre: "Intégration paiement", desc: "Intégrer la passerelle de paiement Stripe", statut: .backlog, priorite: .haute),
+        Ticket(titre: "Page produit", desc: "Créer la page de détail produit avec gallery", statut: .aFaire, priorite: .moyenne),
+        Ticket(titre: "Optimisation SEO", desc: "Améliorer le référencement des pages principales", statut: .aTester, priorite: .basse),
+        Ticket(titre: "Correction bug panier", desc: "Résoudre le problème de mise à jour des quantités", statut: .termine, priorite: .critique)
+    ]
+    
+    // Ajouter des instructions à certains tickets
+    let instructionsPaiement = [
+        Instruction(texte: "Créer un compte développeur Stripe", estTerminee: true),
+        Instruction(texte: "Générer les clés API", estTerminee: true),
+        Instruction(texte: "Intégrer le SDK Stripe", estTerminee: false),
+        Instruction(texte: "Implémenter le processus de paiement", estTerminee: false)
+    ]
+
+    let instructionsPageProduit = [
+        Instruction(texte: "Maquetter la page", estTerminee: true),
+        Instruction(texte: "Créer la galerie d'images", estTerminee: false),
+        Instruction(texte: "Implémenter le sélecteur de variantes", estTerminee: false)
+    ]
+    
+    for instruction in instructionsPaiement {
+        tickets[0].instructions.append(instruction)
+    }
+    
+    for instruction in instructionsPageProduit {
+        tickets[1].instructions.append(instruction)
+    }
+    
+    for ticket in tickets {
+        projetWeb.tickets.append(ticket)
+    }
+    
+    let ticketsMobile = [
+        Ticket(titre: "Login avec Touch ID", desc: "Ajouter l'authentification biométrique", statut: .backlog, priorite: .haute),
+        Ticket(titre: "Mode hors-ligne", desc: "Permettre l'utilisation sans connexion internet", statut: .aFaire, priorite: .moyenne),
+        Ticket(titre: "Notifications push", desc: "Configurer les notifications pour les nouveaux messages", statut: .aTester, priorite: .moyenne)
+    ]
+    
+    // Ajouter des instructions au ticket Login
+    let instructionsLogin = [
+        Instruction(texte: "Ajouter les permissions dans Info.plist", estTerminee: true),
+        Instruction(texte: "Implémenter la méthode d'authentification", estTerminee: false),
+        Instruction(texte: "Gérer les cas d'erreur", estTerminee: false)
+    ]
+    
+    for instruction in instructionsLogin {
+        ticketsMobile[0].instructions.append(instruction)
+    }
+    
+    for ticket in ticketsMobile {
+        projetMobile.tickets.append(ticket)
+    }
+    
+    modelContext.insert(projetWeb)
+    modelContext.insert(projetMobile)
+}
+
+// 6. Mettre à jour NouveauTicketView pour supporter les instructions
 struct NouveauTicketView: View {
     @Environment(\.modelContext) private var modelContext
     @Binding var estAffiche: Bool
@@ -500,6 +815,8 @@ struct NouveauTicketView: View {
     @State private var desc = ""
     @State private var statut: Statut = .backlog
     @State private var priorite: Priorite = .moyenne
+    @State private var nouvelleInstruction = ""
+    @State private var instructions: [String] = []
     
     var body: some View {
         VStack(spacing: 20) {
@@ -507,61 +824,111 @@ struct NouveauTicketView: View {
                 .font(.title)
                 .fontWeight(.bold)
             
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Titre")
-                    .font(.headline)
-                TextField("Titre du ticket", text: $titre)
-                    .padding()
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(10)
-                
-                Text("desc")
-                    .font(.headline)
-                    .padding(.top, 5)
-                TextEditor(text: $desc)
-                    .padding(10)
-                    .frame(height: 100)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                    )
-                
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text("Statut")
-                            .font(.headline)
-                        Picker("Statut", selection: $statut) {
-                            ForEach(Statut.allCases, id: \.self) { statut in
-                                Text(statut.rawValue).tag(statut)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .padding(8)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Titre")
+                        .font(.headline)
+                    TextField("Titre du ticket", text: $titre)
+                        .padding()
                         .background(Color.gray.opacity(0.1))
-                        .cornerRadius(8)
+                        .cornerRadius(10)
+                    
+                    Text("Description")
+                        .font(.headline)
+                        .padding(.top, 5)
+                    TextEditor(text: $desc)
+                        .padding(10)
+                        .frame(height: 100)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                    
+                    // Section des instructions
+                    Text("Instructions")
+                        .font(.headline)
+                        .padding(.top, 5)
+                    
+                    ForEach(instructions.indices, id: \.self) { index in
+                        HStack {
+                            Text("\(index + 1).")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            TextField("Instruction", text: $instructions[index])
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.gray.opacity(0.05))
+                                .cornerRadius(5)
+                            
+                            Button(action: {
+                                instructions.remove(at: index)
+                            }) {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundColor(.red)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                     
-                    Spacer()
+                    // Ajout d'une nouvelle instruction
+                    HStack {
+                        TextField("Ajouter une instruction", text: $nouvelleInstruction)
+                            .padding(10)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(8)
+                        
+                        Button(action: {
+                            if !nouvelleInstruction.isEmpty {
+                                instructions.append(nouvelleInstruction)
+                                nouvelleInstruction = ""
+                            }
+                        }) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title3)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(nouvelleInstruction.isEmpty)
+                    }
                     
-                    VStack(alignment: .leading) {
-                        Text("Priorité")
-                            .font(.headline)
-                        Picker("Priorité", selection: $priorite) {
-                            ForEach(Priorite.allCases, id: \.self) { priorite in
-                                HStack {
-                                    Circle()
-                                        .fill(priorite.couleur)
-                                        .frame(width: 8, height: 8)
-                                    Text(priorite.rawValue).tag(priorite)
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text("Statut")
+                                .font(.headline)
+                            Picker("Statut", selection: $statut) {
+                                ForEach(Statut.allCases, id: \.self) { statut in
+                                    Text(statut.rawValue).tag(statut)
                                 }
                             }
+                            .pickerStyle(.menu)
+                            .padding(8)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(8)
                         }
-                        .pickerStyle(.menu)
-                        .padding(8)
-                        .background(Color.gray.opacity(0.1))
-                        .cornerRadius(8)
+                        
+                        Spacer()
+                        
+                        VStack(alignment: .leading) {
+                            Text("Priorité")
+                                .font(.headline)
+                            Picker("Priorité", selection: $priorite) {
+                                ForEach(Priorite.allCases, id: \.self) { priorite in
+                                    HStack {
+                                        Circle()
+                                            .fill(priorite.couleur)
+                                            .frame(width: 8, height: 8)
+                                        Text(priorite.rawValue).tag(priorite)
+                                    }
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .padding(8)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(8)
+                        }
                     }
                 }
+                .padding(.bottom, 20)
             }
             
             Spacer()
@@ -583,12 +950,79 @@ struct NouveauTicketView: View {
             }
         }
         .padding()
+        .frame(minHeight: 600)
     }
     
     private func creerTicket() {
         guard !titre.isEmpty else { return }
         
         let nouveauTicket = Ticket(titre: titre, desc: desc, statut: statut, priorite: priorite)
+        
+        // Ajouter les instructions
+        for texteInstruction in instructions {
+            let instruction = Instruction(texte: texteInstruction)
+            nouveauTicket.instructions.append(instruction)
+        }
+        
         projet.tickets.append(nouveauTicket)
+        try? modelContext.save()
     }
 }
+
+// MARK: - Vue pour créer un nouveau projet
+struct NouveauProjetView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss // Utiliser dismiss pour fermer la vue
+    @Binding var estAffiche: Bool
+    @State private var nomProjet = ""
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Nouveau projet")
+                .font(.title)
+                .fontWeight(.bold)
+            
+            Divider()
+            
+            TextField("Nom du projet", text: $nomProjet)
+                .font(.title3)
+                .padding()
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(10)
+            
+            Spacer()
+            
+            HStack {
+                Button("Annuler") {
+                    nomProjet = "" // Réinitialiser le champ
+                    estAffiche = false
+                }
+                .buttonStyle(.bordered)
+                
+                Spacer()
+                
+                Button("Créer") {
+                    creerProjet()
+                    nomProjet = "" // Réinitialiser le champ
+                    estAffiche = false
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(nomProjet.isEmpty)
+            }
+        }
+        .padding()
+        .onDisappear {
+            // S'assurer que le champ est réinitialisé à la fermeture
+            nomProjet = ""
+        }
+    }
+    
+    private func creerProjet() {
+        guard !nomProjet.isEmpty else { return }
+        
+        let nouveauProjet = Projet(nom: nomProjet)
+        modelContext.insert(nouveauProjet)
+        try? modelContext.save() // S'assurer que le projet est enregistré
+    }
+}
+
